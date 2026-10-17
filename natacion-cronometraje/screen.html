@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tabla de resultados - Natación</title>
+  <link rel="stylesheet" href="./src/css/screen.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">25M</div>
+        <h1 class="brand-title">Control de natación</h1>
+      </div>
+    </header>
+
+    <section class="official-clock" aria-label="Cronómetro oficial">
+      <div>
+        <p class="head-label">Tiempo oficial</p>
+        <div id="eventTime" class="event-time">00:00.00</div>
+        <p id="eventRemaining" class="event-remaining">Restante: 30:00.00</p>
+      </div>
+      <div id="eventStatus" class="status-chip">Preparado</div>
+    </section>
+
+    <section class="table-panel">
+      <div class="table-head">
+        <div>
+          <p class="head-label">Resultados</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Carril</th>
+            <th>Equipo</th>
+            <th>Juez</th>
+            <th>Distancia</th>
+            <th>Tiempo acumulado</th>
+            <th>Vueltas</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr>
+            <td colspan="7" class="empty-state">Esperando información de los jueces...</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script type="module" src="./src/js/screen.js"></script>
+</body>
+</html>

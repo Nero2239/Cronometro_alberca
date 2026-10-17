@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1724">
+  <title>Cronometraje de Natación</title>
+  <link rel="stylesheet" href="./src/css/judge.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="badge">25M</div>
+        <h1 class="brand-title">Puesto del juez</h1>
+      </div>
+      <div id="statusPill" class="status-pill">Preparado</div>
+    </header>
+    <div id="connectionNotice" class="connection-notice offline" role="status">Conectando con el evento...</div>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="title">Puesto del juez</div>
+        <h2 class="section-title">Datos de participación</h2>
+        <p class="section-desc">El administrador asigna el carril. Aquí puedes actualizar los nombres y registrar las vueltas.</p>
+
+        <div class="field">
+          <label for="lane">Carril</label>
+          <div id="lane" class="assigned-lane">1</div>
+        </div>
+
+        <div class="field">
+          <label for="team">Equipo o relevo</label>
+          <input id="team" type="text" placeholder="Nombre del equipo">
+        </div>
+
+        <div class="field">
+          <label for="judge">Nombre del juez</label>
+          <input id="judge" type="text" placeholder="Nombre del juez">
+        </div>
+
+        <div class="info-box">
+          El cronómetro oficial se controla desde el panel del administrador. Cada registro suma la distancia configurada para la prueba.
+        </div>
+      </aside>
+
+      <section class="panel-main">
+        <div class="display-header">
+          <div>
+            <div class="lane-title">Carril <span id="laneLabel">1</span></div>
+            <h2 id="teamLabel" class="lane-name">Equipo por asignar</h2>
+          </div>
+        </div>
+
+        <div class="timer-card">
+          <div class="metric-grid">
+            <div class="timer-block">
+              <div class="timer-label">Tiempo oficial</div>
+              <div id="time" class="time-big">00:00.00</div>
+              <div class="timer-meta">
+                <div class="remaining">Restante: <span id="remaining">30:00.00</span></div>
+                <div id="eventStateLabel" class="remaining">Esperando al administrador</div>
+              </div>
+            </div>
+
+            <div class="stat-stack">
+              <div class="stat-box">
+                <div class="stat-label">Distancia</div>
+                <div id="distanceValue" class="stat-value">0 m</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Vueltas</div>
+                <div id="lapsValue" class="stat-value">0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="action-row judge-action-row">
+            <button id="readyBtn" class="action-btn ready-btn" type="button" disabled>
+              <span id="readyBtnLabel" class="label">Estoy preparado</span>
+              <span id="readyBtnSub" class="subtext">Esperando conexión</span>
+            </button>
+            <button id="lapBtn" class="action-btn record" type="button" disabled>
+              <span class="label">Registrar vuelta</span>
+              <span id="lapBtnSub" class="subtext">Sumar +50 metros</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="bottombar">
+          <div class="mini-panel">
+            <div class="mini-header">
+              <h3 class="mini-header-title">Sesión actual</h3>
+              <div id="lapCountBadge" class="mini-badge">0</div>
+            </div>
+            <div class="recent-lap" id="recentLap">Aún no hay vueltas registradas</div>
+            <div id="lapPanelBody" class="mini-body lap-history">
+              <div class="empty-state">La sesión actual aparecerá aquí.</div>
+            </div>
+            <div class="pagination-controls">
+              <button id="previousPageBtn" class="soft-btn" type="button" disabled aria-label="Página anterior">Anterior</button>
+              <span id="pageLabel" aria-live="polite">0 vueltas</span>
+              <button id="nextPageBtn" class="soft-btn" type="button" disabled aria-label="Página siguiente">Siguiente</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./src/js/judge.js"></script>
+</body>
+</html>

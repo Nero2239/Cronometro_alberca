@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1724">
+  <title>Administración - Cronometraje de Natación</title>
+  <link rel="stylesheet" href="./src/css/admin.css">
+</head>
+<body>
+  <main class="admin-app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="badge">25M</div>
+        <div>
+          <p class="eyebrow">Control del evento</p>
+          <h1>Administración</h1>
+        </div>
+      </div>
+      <nav class="page-links" aria-label="Vistas">
+        <a href="./index.html">Juez</a>
+        <a href="./screen.html" target="_blank" rel="noreferrer">Proyección</a>
+      </nav>
+    </header>
+    <div id="connectionStatus" class="connection-banner offline" role="status">Conectando con Firebase...</div>
+
+    <section class="control-panel" aria-labelledby="eventTitle">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Cronómetro oficial</p>
+          <h2 id="eventTitle">Control de prueba</h2>
+        </div>
+        <div id="statusPill" class="status-pill">Preparado</div>
+      </div>
+
+      <div class="timer-display">
+        <div id="time" class="time-big">00:00.00</div>
+        <p id="eventMessage" aria-live="polite">Listo para iniciar</p>
+        <p id="eventRemaining" class="event-remaining">Restante: 30:00.00</p>
+      </div>
+
+      <div id="readinessSummary" class="readiness-summary" role="status">Jueces preparados: 0/1</div>
+
+      <div class="admin-controls">
+        <button id="startBtn" class="control-btn start-btn" type="button" disabled>Iniciar tiempo</button>
+        <button id="stopBtn" class="control-btn stop-btn" type="button" disabled>Detener tiempo</button>
+        <button id="exportBtn" class="control-btn export-btn" type="button">Exportar Excel</button>
+      </div>
+      <p id="actionFeedback" class="action-feedback" role="status"></p>
+
+      <div class="event-settings">
+        <div class="field">
+          <label for="distanceStep">Metros por vuelta</label>
+          <select id="distanceStep">
+            <option value="25">25 metros</option>
+            <option value="50" selected>50 metros</option>
+            <option value="100">100 metros</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+        <div id="customStepWrap" class="field" hidden>
+          <label for="customStep">Distancia personalizada</label>
+          <input id="customStep" type="number" min="1" step="1" value="75">
+        </div>
+        <div class="field">
+          <label for="duration">Duración del evento</label>
+          <select id="duration">
+            <option value="900">15 minutos</option><option value="1800" selected>30 minutos</option>
+            <option value="2700">45 minutos</option><option value="3600">60 minutos</option>
+            <option value="5400">90 minutos</option><option value="7200">120 minutos</option>
+            <option value="custom">Personalizada</option>
+          </select>
+          <div id="customDurationWrap" class="custom-duration" hidden>
+            <label for="customDuration">Minutos</label>
+            <input id="customDuration" type="number" min="1" step="1" value="20">
+          </div>
+        </div>
+        <div class="field">
+          <label for="expectedLanes">Carriles requeridos</label>
+          <input id="expectedLanes" type="text" value="1" placeholder="Ej. 1, 3, 5-8" autocomplete="off">
+          <small id="laneListHint" class="field-hint">Escribe números separados por coma; también puedes usar rangos, por ejemplo 1-8.</small>
+        </div>
+        <div class="lane-assignment">
+          <label for="assignedLane">Carril para asignar</label>
+          <div class="assignment-row">
+            <input id="assignedLane" type="number" min="1" max="99" step="1" value="1" aria-label="Carril para asignar">
+            <button id="generateQrBtn" class="secondary-btn" type="button">Generar QR del carril</button>
+          </div>
+          <dialog id="qrDialog" class="qr-dialog" aria-labelledby="qrDialogTitle">
+            <div class="qr-dialog-head">
+              <div>
+                <p class="eyebrow">Asignación de juez</p>
+                <h2 id="qrDialogTitle">Código QR del carril</h2>
+              </div>
+              <button id="closeQrBtn" class="qr-close-btn" type="button" aria-label="Cerrar código QR">Cerrar</button>
+            </div>
+            <div class="qr-dialog-content">
+              <canvas id="qrCanvas" width="256" height="256" aria-label="Código QR del juez"></canvas>
+              <p id="qrLaneLabel" class="qr-lane-label"></p>
+              <a id="judgeQrLink" class="qr-link" target="_blank" rel="noreferrer"></a>
+              <button id="copyQrLinkBtn" class="secondary-btn" type="button">Copiar enlace</button>
+              <p id="qrCopyFeedback" class="qr-copy-feedback" aria-live="polite"></p>
+            </div>
+          </dialog>
+          <p id="qrMessage" class="copy-message" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="records-panel" aria-labelledby="recordsTitle">
+      <div class="records-heading">
+        <div>
+          <p class="eyebrow">Sincronización en vivo</p>
+          <h2 id="recordsTitle">Registros por carril</h2>
+        </div>
+        <div class="record-count"><span id="recordCount">0</span> carriles</div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Carril</th><th>Equipo</th><th>Juez</th><th>Preparación</th><th>Vueltas</th><th>Distancia</th><th>Tiempo acumulado</th></tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="7" class="empty-state">Selecciona los carriles y espera a que los jueces se conecten.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./src/js/admin.js"></script>
+</body>
+</html>
