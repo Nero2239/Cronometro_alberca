@@ -20,7 +20,9 @@ const state = {
   connectionError: '',
   rafId: null,
   stopInProgress: false,
-  autoStopStartedAt: null
+  autoStopStartedAt: null,
+  durationControlsDirty: false,
+  pendingDurationMs: null
 };
 
 const formatTime = (ms) => {
@@ -444,6 +446,12 @@ $('copyQrLinkBtn').addEventListener('click', async () => {
 });
 
 let durationSaveTimeout = null;
+let configurationSaveQueue = Promise.resolve();
+const markDurationControlsDirty = () => {
+  state.durationControlsDirty = true;
+  state.pendingDurationMs = getDurationMs();
+};
+
 const persistConfiguration = async () => {
   if (!state.connected || state.competition.status === 'running') return;
   if (getDurationMs() === null) {
@@ -455,14 +463,20 @@ const persistConfiguration = async () => {
   if ($('actionFeedback').textContent.startsWith('La duración debe estar')) {
     $('actionFeedback').textContent = '';
   }
+  const configuration = {
+    status: state.competition.status || 'ready',
+    distancePerLap: getDistanceStep(),
+    durationMs: getDurationMs(),
+    expectedLanes: getExpectedLanes(),
+    updatedAt: serverTimestamp()
+  };
+  const save = configurationSaveQueue.then(
+    () => setCompetitionState(configuration),
+    () => setCompetitionState(configuration)
+  );
+  configurationSaveQueue = save;
   try {
-    await setCompetitionState({
-      status: state.competition.status || 'ready',
-      distancePerLap: getDistanceStep(),
-      durationMs: getDurationMs(),
-      expectedLanes: getExpectedLanes(),
-      updatedAt: serverTimestamp()
-    });
+    await save;
   } catch (error) {
     $('actionFeedback').textContent = `No se guardó la configuración: ${error.message || 'revisa Firebase.'}`;
   }
@@ -484,6 +498,7 @@ $('distanceStep').addEventListener('change', () => {
 $('duration').addEventListener('change', () => {
   $('customDurationWrap').hidden = $('duration').value !== 'custom';
   $('durationHint').hidden = $('duration').value !== 'custom';
+  markDurationControlsDirty();
   renderTimer();
   persistConfiguration();
 });
@@ -499,6 +514,7 @@ $('customStep').addEventListener('change', () => {
 });
 for (const id of ['durationHours', 'durationMinutes', 'durationSeconds']) {
   $(id).addEventListener('input', () => {
+    markDurationControlsDirty();
     renderTimer();
     scheduleDurationConfigurationSave();
   });
@@ -559,15 +575,24 @@ subscribeToCompetition((competition) => {
   }
   if (competition.durationMs) {
     const seconds = Number(competition.durationMs) / 1000;
-    const preset = [...$('duration').options].some((option) => Number(option.value) === seconds);
-    $('duration').value = preset ? String(seconds) : 'custom';
-    if (!preset && !['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
-      $('durationHours').value = String(Math.floor(seconds / 3600));
-      $('durationMinutes').value = String(Math.floor((seconds % 3600) / 60));
-      $('durationSeconds').value = String(Math.floor(seconds % 60));
+    const matchesPendingDuration = state.pendingDurationMs !== null
+      && Number(competition.durationMs) === state.pendingDurationMs;
+    if (matchesPendingDuration) state.durationControlsDirty = false;
+    if (competition.status === 'running') {
+      state.durationControlsDirty = false;
+      state.pendingDurationMs = null;
     }
-    $('customDurationWrap').hidden = preset;
-    $('durationHint').hidden = preset || getDurationMs() !== null;
+    if (!state.durationControlsDirty) {
+      const preset = [...$('duration').options].some((option) => Number(option.value) === seconds);
+      $('duration').value = preset ? String(seconds) : 'custom';
+      if (!preset && !['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
+        $('durationHours').value = String(Math.floor(seconds / 3600));
+        $('durationMinutes').value = String(Math.floor((seconds % 3600) / 60));
+        $('durationSeconds').value = String(Math.floor(seconds % 60));
+      }
+      $('customDurationWrap').hidden = preset;
+      $('durationHint').hidden = preset || getDurationMs() !== null;
+    }
   }
   renderTimer();
 }, (error) => {
