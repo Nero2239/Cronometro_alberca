@@ -7,7 +7,7 @@ import {
   subscribeToServerOffset,
   subscribeToSessions,
   updateSession
-} from './firebase.js';
+} from './firebase.js?v=2';
 
 const $ = (id) => document.getElementById(id);
 const state = {

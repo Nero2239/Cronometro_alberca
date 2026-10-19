@@ -2,6 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   collection,
   connectFirestoreEmulator,
+  deleteField,
   doc,
   initializeFirestore,
   onSnapshot,
@@ -45,7 +46,11 @@ const normalizeTimestamps = (data) => ({
 
 export const serverTimestamp = () => firebaseServerTimestamp();
 export const setCompetitionState = async (state) => {
-  await setDoc(competitionRef, state, { merge: true });
+  await setDoc(competitionRef, {
+    ...state,
+    startedAt: state.startedAt === undefined ? null : state.startedAt,
+    lastSeenAt: deleteField()
+  }, { merge: true });
 };
 export const subscribeToCompetition = (callback, onError = () => {}) => {
   return onSnapshot(competitionRef, { includeMetadataChanges: true }, (snapshot) => {

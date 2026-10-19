@@ -7,7 +7,7 @@ import {
   subscribeToServerOffset,
   subscribeToSession,
   updateSession
-} from './firebase.js';
+} from './firebase.js?v=2';
 
 const PAGE_SIZE = 6;
 const params = new URLSearchParams(window.location.search);
