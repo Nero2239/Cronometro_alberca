@@ -14,6 +14,10 @@ const params = new URLSearchParams(window.location.search);
 const requestedLane = params.get('lane') || '1';
 const lane = /^[1-9]\d?$/.test(requestedLane) ? requestedLane : '1';
 const $ = (id) => document.getElementById(id);
+const showErrorDialog = (message) => {
+  $('errorDialogMessage').textContent = message;
+  $('errorDialog').showModal();
+};
 const state = {
   competition: { status: 'ready' },
   serverOffset: 0,
@@ -46,7 +50,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 
 const getElapsed = () => {
   if (state.competition.status === 'running' && Number(state.competition.startedAt)) {
-    return Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const elapsed = Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const duration = Number(state.competition.durationMs) || 1800000;
+    return Math.min(elapsed, duration);
   }
   return Math.max(0, Number(state.competition.elapsedMs) || 0);
 };
@@ -115,7 +121,7 @@ const renderTimer = () => {
   $('remaining').textContent = formatTime(remaining);
   $('distanceValue').textContent = `${Number(state.session?.totalDistance) || 0} m`;
   $('lapsValue').textContent = String(laps.length);
-  $('lapBtn').disabled = !running || !state.connected;
+  $('lapBtn').disabled = !running || remaining === 0 || !state.connected;
   const ready = state.session?.ready === true;
   $('readyBtn').disabled = !state.connected || running;
   $('readyBtnLabel').textContent = ready ? 'PREPARADO' : 'NO PREPARADO';
@@ -169,8 +175,10 @@ const saveIdentity = async () => {
 
 const registerLap = async () => {
   if (state.competition.status !== 'running' || !state.connected) return;
+  const durationMs = Number(state.competition.durationMs) || 1800000;
   const laps = getLaps();
   const elapsedMs = getElapsed();
+  if (elapsedMs >= durationMs) return;
   const previousElapsed = Number(laps[laps.length - 1]?.elapsedMs) || 0;
   const distancePerLap = Number(state.competition.distancePerLap) || 50;
   const previousDistance = Number(state.session?.totalDistance) || 0;
@@ -209,7 +217,7 @@ const registerLap = async () => {
     renderTimer();
   } catch (error) {
     console.error('No se pudo registrar la vuelta:', error);
-    window.alert('No se pudo sincronizar la vuelta. Revisa la conexión.');
+    showErrorDialog('No se pudo sincronizar la vuelta. Revisa la conexión.');
   }
 };
 
@@ -269,22 +277,24 @@ subscribeToConnection(async (connected) => {
     }
     return;
   }
+  const wasConnected = state.connected;
   state.connectionPending = false;
   state.connectionTimedOut = false;
   state.connected = connected;
   if (connected) {
     try {
-      await setJudgeConnection(lane, true);
+      if (!wasConnected) await setJudgeConnection(lane, true);
       state.connected = true;
       state.connectionError = '';
-      if (state.heartbeatId) clearInterval(state.heartbeatId);
-      state.heartbeatId = setInterval(() => {
-        heartbeatSession(lane).catch((error) => {
-          state.connectionError = error.message || 'No se pudo actualizar la conexión del juez.';
-          state.connected = false;
-          renderConnection();
-        });
-      }, 10000);
+      if (!state.heartbeatId) {
+        state.heartbeatId = setInterval(() => {
+          heartbeatSession(lane).catch((error) => {
+            state.connectionError = error.message || 'No se pudo actualizar la conexión del juez.';
+            state.connected = false;
+            renderConnection();
+          });
+        }, 10000);
+      }
     } catch (error) {
       console.error('No se pudo registrar la conexión del juez:', error);
       state.connected = false;

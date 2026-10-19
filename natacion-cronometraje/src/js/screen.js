@@ -31,7 +31,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 
 const getElapsed = () => {
   if (state.competition.status === 'running' && Number(state.competition.startedAt)) {
-    return Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const elapsed = Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const duration = Number(state.competition.durationMs) || 1800000;
+    return Math.min(elapsed, duration);
   }
   return Math.max(0, Number(state.competition.elapsedMs) || 0);
 };

@@ -4,9 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "npx serve . -l 8000",
-    "deploy": "firebase deploy"
+    "deploy": "npx firebase-tools deploy",
+    "deploy:hosting": "npx firebase-tools deploy --only hosting",
+    "deploy:rules": "npx firebase-tools deploy --only firestore:rules",
+    "login": "npx firebase-tools login"
   },
   "dependencies": {
     "firebase": "^10.12.2"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.34.0"
   }
 }

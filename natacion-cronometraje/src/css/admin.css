@@ -130,9 +130,18 @@ h2 { font-size: 1.2rem; }
 @media (max-width: 1050px) {
   .event-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (max-width: 620px) {
+  body { padding: 14px; }
+  .control-panel { padding: 16px; }
+  .admin-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .admin-controls .export-btn { margin-left: 0; }
+  .event-settings { grid-template-columns: 1fr; gap: 16px; }
+  .assignment-row { align-items: stretch; flex-wrap: wrap; }
+  .assignment-row select { flex: 1; max-width: none; }
+}
 .field label, .lane-assignment label { display: block; margin-bottom: 8px; color: #36586a; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
 .field-label { display: block; margin-bottom: 8px; color: #36586a; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
-.field select, .field input, .assignment-row select, .assignment-row input {
+.field select, .field input, .assignment-row select {
   width: 100%;
   min-height: 42px;
   padding: 8px 12px;
@@ -142,11 +151,17 @@ h2 { font-size: 1.2rem; }
   color: var(--ink);
 }
 .field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
+.field-hint[hidden] { display: none; }
 .field-hint.invalid { color: #9a392c; font-weight: 700; }
-.custom-duration { display: grid; grid-template-columns: 1fr; margin-top: 12px; }
+.custom-duration { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 6px; margin-top: 12px; }
 .custom-duration[hidden] { display: none; }
+.duration-part { min-width: 0; }
+.duration-part label { font-size: 0.68rem; }
+.duration-part input { width: 100%; }
+.duration-separator { padding-bottom: 10px; color: var(--muted); font-size: 1.2rem; font-weight: 800; }
+.reset-btn { background: #477d9a; color: #fff; }
 .assignment-row { gap: 10px; }
-.assignment-row input { min-width: 82px; max-width: 110px; }
+.assignment-row select { min-width: 110px; max-width: 180px; }
 .secondary-btn { background: #e2edf1; color: #123d50; }
 .copy-message { min-height: 18px; margin-top: 5px; color: #147251; font-size: 0.8rem; }
 .qr-dialog {
@@ -191,6 +206,6 @@ tbody tr:last-child td { border-bottom: 0; }
   .export-btn { grid-column: 1 / -1; margin-left: 0; }
   .assignment-row { align-items: stretch; flex-direction: column; }
   .assignment-row select, .secondary-btn { width: 100%; }
-  .assignment-row input { width: 100%; max-width: none; }
+  .assignment-row select { width: 100%; max-width: none; }
   .table-scroll { margin: 0; }
 }

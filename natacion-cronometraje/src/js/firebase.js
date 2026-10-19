@@ -1,6 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   collection,
+  connectFirestoreEmulator,
   doc,
   initializeFirestore,
   onSnapshot,
@@ -20,6 +21,9 @@ export const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}
 const competitionRef = doc(db, 'competition', 'state');
 const sessionsCollection = collection(db, 'sessions');
 const sessionRef = (lane) => doc(db, 'sessions', String(lane));

@@ -1,4 +1,5 @@
 import {
+  firebaseConfig,
   serverTimestamp,
   setCompetitionState,
   subscribeToConnection,
@@ -17,7 +18,9 @@ const state = {
   connectionPending: true,
   connectionTimedOut: false,
   connectionError: '',
-  rafId: null
+  rafId: null,
+  stopInProgress: false,
+  autoStopStartedAt: null
 };
 
 const formatTime = (ms) => {
@@ -34,10 +37,19 @@ const getDistanceStep = () => $('distanceStep').value === 'custom'
   : Number($('distanceStep').value);
 
 const getDurationMs = () => {
-  const duration = $('duration').value === 'custom'
-    ? Math.max(1, Number($('customDuration').value) || 1) * 60
-    : Number($('duration').value);
-  return duration * 1000;
+  if ($('duration').value !== 'custom') return Number($('duration').value) * 1000;
+
+  const hours = Number($('durationHours').value);
+  const minutes = Number($('durationMinutes').value);
+  const seconds = Number($('durationSeconds').value);
+  if (![hours, minutes, seconds].every(Number.isInteger)
+    || hours < 0 || hours > 24
+    || minutes < 0 || minutes > 59
+    || seconds < 0 || seconds > 59
+    || (hours === 24 && (minutes !== 0 || seconds !== 0))) return null;
+
+  const durationMs = ((hours * 60 + minutes) * 60 + seconds) * 1000;
+  return durationMs > 0 && durationMs <= 86400000 ? durationMs : null;
 };
 
 const parseExpectedLanes = () => {
@@ -65,6 +77,61 @@ const parseExpectedLanes = () => {
 
 const getExpectedLanes = () => parseExpectedLanes().lanes;
 
+const showConfirmation = (dialogId) => new Promise((resolve) => {
+  const dialog = $(dialogId);
+  if (dialog.open) {
+    resolve(false);
+    return;
+  }
+  const form = dialog.querySelector('form');
+  const cleanup = () => {
+    form.removeEventListener('submit', onSubmit);
+    dialog.removeEventListener('cancel', onCancel);
+  };
+  const onSubmit = (event) => {
+    event.preventDefault();
+    const confirmed = event.submitter?.value === 'confirm';
+    cleanup();
+    dialog.close(confirmed ? 'confirm' : 'cancel');
+    resolve(confirmed);
+  };
+  const onCancel = () => {
+    cleanup();
+    resolve(false);
+  };
+  form.addEventListener('submit', onSubmit);
+  dialog.addEventListener('cancel', onCancel);
+  dialog.showModal();
+});
+
+const renderAssignedLaneOptions = () => {
+  const { lanes, error } = parseExpectedLanes();
+  const select = $('assignedLane');
+  const selectedLane = select.value;
+  select.replaceChildren();
+
+  if (error || !lanes.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = error ? 'Corrige los carriles requeridos' : 'Agrega carriles requeridos';
+    select.append(option);
+    select.disabled = true;
+    $('generateQrBtn').disabled = true;
+    return;
+  }
+
+  for (const lane of lanes) {
+    const option = document.createElement('option');
+    option.value = lane;
+    option.textContent = `Carril ${lane}`;
+    select.append(option);
+  }
+
+  select.value = lanes.includes(selectedLane) ? selectedLane : lanes[0];
+  select.disabled = false;
+  $('generateQrBtn').disabled = false;
+};
+
 const getSession = (lane) => state.sessions.find((session) => String(session.lane) === lane);
 const isSessionConnected = (session) => session?.connected === true
   && Number(session.lastSeenAt) > 0
@@ -85,7 +152,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 
 const getElapsed = () => {
   if (state.competition.status === 'running' && Number(state.competition.startedAt)) {
-    return Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const elapsed = Math.max(0, Date.now() + state.serverOffset - state.competition.startedAt);
+    const duration = Number(state.competition.durationMs) || getDurationMs();
+    return duration ? Math.min(elapsed, duration) : elapsed;
   }
   return Math.max(0, Number(state.competition.elapsedMs) || 0);
 };
@@ -94,7 +163,9 @@ const renderTimer = () => {
   if (state.rafId) cancelAnimationFrame(state.rafId);
   const running = state.competition.status === 'running';
   const elapsed = getElapsed();
-  const durationMs = Number(state.competition.durationMs) || getDurationMs();
+  const selectedDuration = getDurationMs();
+  const configuredDuration = Number(state.competition.durationMs) || selectedDuration;
+  const durationMs = running ? configuredDuration || 1800000 : selectedDuration || configuredDuration || 1800000;
   const remaining = Math.max(0, durationMs - elapsed);
   $('time').textContent = formatTime(elapsed);
   $('eventRemaining').textContent = `Restante: ${formatTime(remaining)}`;
@@ -105,14 +176,27 @@ const renderTimer = () => {
   $('statusPill').classList.toggle('running', running);
   $('statusPill').classList.toggle('finished', state.competition.status === 'finished');
   $('eventMessage').textContent = running
-    ? remaining === 0 ? 'Tiempo cumplido; detener manualmente' : 'La prueba está sincronizada con todos los dispositivos'
+    ? remaining === 0 ? 'Tiempo cumplido; detención automática' : 'La prueba está sincronizada con todos los dispositivos'
     : state.competition.status === 'finished' ? 'Tiempo oficial detenido' : 'Listo para iniciar';
   renderReadiness();
   $('stopBtn').disabled = !running;
+  $('resetBtn').disabled = !state.connected || state.connectionPending || state.stopInProgress;
   $('distanceStep').disabled = running;
   $('customStep').disabled = running || $('distanceStep').value !== 'custom';
   $('duration').disabled = running;
-  $('customDuration').disabled = running || $('duration').value !== 'custom';
+  for (const id of ['durationHours', 'durationMinutes', 'durationSeconds']) {
+    $(id).disabled = running || $('duration').value !== 'custom';
+  }
+  $('durationHint').hidden = $('duration').value !== 'custom' || selectedDuration !== null;
+  $('durationHint').classList.toggle('invalid', !$('durationHint').hidden);
+
+  if (running && remaining === 0) {
+    const startedAt = Number(state.competition.startedAt);
+    if (startedAt && state.autoStopStartedAt !== startedAt) {
+      state.autoStopStartedAt = startedAt;
+      stopRunningCompetition(true);
+    }
+  }
 
   if (running) state.rafId = requestAnimationFrame(renderTimer);
 };
@@ -121,7 +205,8 @@ const renderReadiness = () => {
   const { lanes: expectedLanes, error } = parseExpectedLanes();
   const readyCount = getReadyCount();
   const connectedCount = expectedLanes.filter((lane) => isSessionConnected(getSession(lane))).length;
-  const allReady = state.connected && !error && expectedLanes.length > 0 && readyCount === expectedLanes.length;
+  const validDuration = getDurationMs() !== null;
+  const allReady = state.connected && !error && validDuration && expectedLanes.length > 0 && readyCount === expectedLanes.length;
   $('laneListHint').textContent = error || 'Usa comas o rangos. La tabla mostrará solo estos carriles.';
   $('laneListHint').classList.toggle('invalid', Boolean(error));
   $('readinessSummary').textContent = error
@@ -145,6 +230,7 @@ const renderReadiness = () => {
 
 const renderTable = () => {
   const lanes = getExpectedLanes();
+  renderAssignedLaneOptions();
   $('recordCount').textContent = String(lanes.filter((lane) => getSession(lane)).length);
   $('tableBody').innerHTML = lanes.map((lane) => {
     const session = getSession(lane);
@@ -171,7 +257,13 @@ $('startBtn').addEventListener('click', async () => {
   const expectedLanes = getExpectedLanes();
   if (!state.connected || !expectedLanes.length || getReadyCount() !== expectedLanes.length) return;
   const hasPreviousLaps = expectedLanes.some((lane) => (getSession(lane)?.laps?.length || 0) > 0);
-  if (hasPreviousLaps && !window.confirm('Al iniciar una nueva prueba se borrarán las vueltas actuales. ¿Continuar?')) return;
+  if (getDurationMs() === null) {
+    $('durationHint').hidden = false;
+    $('durationHint').classList.add('invalid');
+    $('actionFeedback').textContent = 'La duración debe estar entre 00:00:01 y 24:00:00.';
+    return;
+  }
+  if (hasPreviousLaps && !await showConfirmation('startConfirmDialog')) return;
 
   try {
     await Promise.all(expectedLanes.map((lane) => updateSession(lane, {
@@ -199,8 +291,11 @@ $('startBtn').addEventListener('click', async () => {
   }
 });
 
-$('stopBtn').addEventListener('click', async () => {
-  if (state.competition.status !== 'running') return;
+const stopRunningCompetition = async (automatic = false) => {
+  if (state.competition.status !== 'running' || state.stopInProgress) return;
+  state.stopInProgress = true;
+  $('stopBtn').disabled = true;
+  $('resetBtn').disabled = true;
   const elapsedMs = getElapsed();
   try {
     await Promise.all(getExpectedLanes().map((lane) => updateSession(lane, {
@@ -208,16 +303,60 @@ $('stopBtn').addEventListener('click', async () => {
       phase: 'finished'
     })));
     await setCompetitionState({
-      ...state.competition,
       status: 'finished',
       stoppedAt: serverTimestamp(),
       elapsedMs,
       updatedAt: serverTimestamp()
     });
-    $('actionFeedback').textContent = 'Tiempo detenido y sincronizado.';
+    $('actionFeedback').textContent = automatic
+      ? 'Duración cumplida; tiempo detenido automáticamente.'
+      : 'Tiempo detenido y sincronizado.';
   } catch (error) {
     console.error('No se pudo detener la prueba:', error);
     $('actionFeedback').textContent = `No se pudo detener: ${error.message || 'verifica Firebase y sus reglas.'}`;
+  } finally {
+    state.stopInProgress = false;
+    renderTimer();
+  }
+};
+
+$('stopBtn').addEventListener('click', () => stopRunningCompetition());
+
+$('resetBtn').addEventListener('click', async () => {
+  if (!state.connected || state.stopInProgress) return;
+  $('resetBtn').disabled = true;
+  if (!await showConfirmation('resetConfirmDialog')) {
+    renderTimer();
+    return;
+  }
+
+  state.stopInProgress = true;
+  renderTimer();
+  const expectedLanes = getExpectedLanes();
+  try {
+    await Promise.all(expectedLanes.map((lane) => updateSession(lane, {
+      totalDistance: 0,
+      elapsedMs: 0,
+      laps: [],
+      checkpoints: [],
+      phase: 'finished',
+      ready: false
+    })));
+    await setCompetitionState({
+      status: 'ready',
+      stoppedAt: serverTimestamp(),
+      elapsedMs: 0,
+      expectedLanes,
+      updatedAt: serverTimestamp()
+    });
+    state.autoStopStartedAt = null;
+    $('actionFeedback').textContent = 'Prueba reiniciada; vueltas borradas y jueces pendientes de preparación.';
+  } catch (error) {
+    console.error('No se pudo reiniciar la prueba:', error);
+    $('actionFeedback').textContent = `No se pudo reiniciar: ${error.message || 'verifica Firebase y sus reglas.'}`;
+  } finally {
+    state.stopInProgress = false;
+    renderTimer();
   }
 });
 
@@ -270,14 +409,14 @@ $('exportBtn').addEventListener('click', async () => {
 });
 
 $('generateQrBtn').addEventListener('click', async () => {
-  const assignedLane = Number($('assignedLane').value);
-  if (!Number.isInteger(assignedLane) || assignedLane < 1 || assignedLane > 99) {
-    $('qrMessage').textContent = 'Escribe un carril entre 1 y 99.';
+  const assignedLane = $('assignedLane').value;
+  if (!getExpectedLanes().includes(assignedLane)) {
+    $('qrMessage').textContent = 'Selecciona un carril de la lista de carriles requeridos.';
     return;
   }
 
-  const judgeUrl = new URL('./index.html', window.location.href);
-  judgeUrl.searchParams.set('lane', String(assignedLane));
+  const judgeUrl = new URL(`https://${firebaseConfig.projectId}.web.app/index.html`);
+  judgeUrl.searchParams.set('lane', assignedLane);
   try {
     const module = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
     const QRCode = module.default || module;
@@ -304,11 +443,20 @@ $('copyQrLinkBtn').addEventListener('click', async () => {
   }
 });
 
+let durationSaveTimeout = null;
 const persistConfiguration = async () => {
   if (!state.connected || state.competition.status === 'running') return;
+  if (getDurationMs() === null) {
+    $('durationHint').hidden = false;
+    $('durationHint').classList.add('invalid');
+    $('actionFeedback').textContent = 'La duración debe estar entre 00:00:01 y 24:00:00.';
+    return;
+  }
+  if ($('actionFeedback').textContent.startsWith('La duración debe estar')) {
+    $('actionFeedback').textContent = '';
+  }
   try {
     await setCompetitionState({
-      ...state.competition,
       status: state.competition.status || 'ready',
       distancePerLap: getDistanceStep(),
       durationMs: getDurationMs(),
@@ -320,6 +468,14 @@ const persistConfiguration = async () => {
   }
 };
 
+const scheduleDurationConfigurationSave = () => {
+  if (durationSaveTimeout) clearTimeout(durationSaveTimeout);
+  durationSaveTimeout = setTimeout(() => {
+    durationSaveTimeout = null;
+    persistConfiguration();
+  }, 500);
+};
+
 $('distanceStep').addEventListener('change', () => {
   $('customStepWrap').hidden = $('distanceStep').value !== 'custom';
   renderTimer();
@@ -327,6 +483,7 @@ $('distanceStep').addEventListener('change', () => {
 });
 $('duration').addEventListener('change', () => {
   $('customDurationWrap').hidden = $('duration').value !== 'custom';
+  $('durationHint').hidden = $('duration').value !== 'custom';
   renderTimer();
   persistConfiguration();
 });
@@ -340,9 +497,19 @@ $('customStep').addEventListener('change', () => {
   renderTimer();
   persistConfiguration();
 });
-$('customDuration').addEventListener('change', () => {
-  renderTimer();
-  persistConfiguration();
+for (const id of ['durationHours', 'durationMinutes', 'durationSeconds']) {
+  $(id).addEventListener('input', () => {
+    renderTimer();
+    scheduleDurationConfigurationSave();
+  });
+  $(id).addEventListener('change', renderTimer);
+}
+$('customDurationWrap').addEventListener('focusout', (event) => {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    if (durationSaveTimeout) clearTimeout(durationSaveTimeout);
+    durationSaveTimeout = null;
+    persistConfiguration();
+  }
 });
 
 subscribeToServerOffset((offset) => {
@@ -361,6 +528,7 @@ subscribeToConnection((connected) => {
   state.connectionTimedOut = false;
   state.connected = connected;
   state.connectionError = '';
+  if (!connected) state.autoStopStartedAt = null;
   renderReadiness();
 }, (error) => {
   console.error('Error de conexión con Firebase:', error);
@@ -393,8 +561,13 @@ subscribeToCompetition((competition) => {
     const seconds = Number(competition.durationMs) / 1000;
     const preset = [...$('duration').options].some((option) => Number(option.value) === seconds);
     $('duration').value = preset ? String(seconds) : 'custom';
-    if (!preset) $('customDuration').value = String(Math.max(1, Math.round(seconds / 60)));
+    if (!preset && !['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
+      $('durationHours').value = String(Math.floor(seconds / 3600));
+      $('durationMinutes').value = String(Math.floor((seconds % 3600) / 60));
+      $('durationSeconds').value = String(Math.floor(seconds % 60));
+    }
     $('customDurationWrap').hidden = preset;
+    $('durationHint').hidden = preset || getDurationMs() !== null;
   }
   renderTimer();
 }, (error) => {

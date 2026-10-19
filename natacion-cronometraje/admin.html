@@ -5,13 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1724">
   <title>Administración - Cronometraje de Natación</title>
-  <link rel="stylesheet" href="./src/css/admin.css">
+  <link rel="stylesheet" href="./src/css/admin.css?v=2">
+  <link rel="stylesheet" href="./src/css/aero.css?v=2">
 </head>
 <body>
   <main class="admin-app">
     <header class="topbar">
       <div class="brand">
-        <div class="badge">25M</div>
+        <div class="badge" role="img" aria-label="Natación">
+          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <circle cx="23.5" cy="7" r="2" fill="currentColor" stroke="none"/>
+            <path d="M8 12.5c2.3-2.8 5.3-3.1 8.3-.7l3.1 2.5 4.1-.8M10 12l-2.2 3.7 5.1 1.5 3.8-2.7M4 21c2.7-2 5.3-2 8 0s5.3 2 8 0 5.3-2 8 0M4 26c2.7-2 5.3-2 8 0s5.3 2 8 0 5.3-2 8 0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+          </svg>
+        </div>
         <div>
           <p class="eyebrow">Control del evento</p>
           <h1>Administración</h1>
@@ -44,6 +50,7 @@
       <div class="admin-controls">
         <button id="startBtn" class="control-btn start-btn" type="button" disabled>Iniciar tiempo</button>
         <button id="stopBtn" class="control-btn stop-btn" type="button" disabled>Detener tiempo</button>
+        <button id="resetBtn" class="control-btn reset-btn" type="button" disabled>Reiniciar tiempo</button>
         <button id="exportBtn" class="control-btn export-btn" type="button">Exportar Excel</button>
       </div>
       <p id="actionFeedback" class="action-feedback" role="status"></p>
@@ -71,9 +78,22 @@
             <option value="custom">Personalizada</option>
           </select>
           <div id="customDurationWrap" class="custom-duration" hidden>
-            <label for="customDuration">Minutos</label>
-            <input id="customDuration" type="number" min="1" step="1" value="20">
+            <div class="duration-part">
+              <label for="durationHours">Horas</label>
+              <input id="durationHours" type="number" min="0" max="24" step="1" value="0">
+            </div>
+            <span class="duration-separator" aria-hidden="true">:</span>
+            <div class="duration-part">
+              <label for="durationMinutes">Minutos</label>
+              <input id="durationMinutes" type="number" min="0" max="59" step="1" value="20">
+            </div>
+            <span class="duration-separator" aria-hidden="true">:</span>
+            <div class="duration-part">
+              <label for="durationSeconds">Segundos</label>
+              <input id="durationSeconds" type="number" min="0" max="59" step="1" value="0">
+            </div>
           </div>
+          <small id="durationHint" class="field-hint" hidden>Usa una duración entre 00:00:01 y 24:00:00.</small>
         </div>
         <div class="field">
           <label for="expectedLanes">Carriles requeridos</label>
@@ -81,9 +101,9 @@
           <small id="laneListHint" class="field-hint">Escribe números separados por coma; también puedes usar rangos, por ejemplo 1-8.</small>
         </div>
         <div class="lane-assignment">
-          <label for="assignedLane">Carril para asignar</label>
+          <label for="assignedLane">Carril para generar el QR</label>
           <div class="assignment-row">
-            <input id="assignedLane" type="number" min="1" max="99" step="1" value="1" aria-label="Carril para asignar">
+            <select id="assignedLane" aria-label="Carril para generar el QR"></select>
             <button id="generateQrBtn" class="secondary-btn" type="button">Generar QR del carril</button>
           </div>
           <dialog id="qrDialog" class="qr-dialog" aria-labelledby="qrDialogTitle">
@@ -101,6 +121,26 @@
               <button id="copyQrLinkBtn" class="secondary-btn" type="button">Copiar enlace</button>
               <p id="qrCopyFeedback" class="qr-copy-feedback" aria-live="polite"></p>
             </div>
+          </dialog>
+          <dialog id="startConfirmDialog" class="app-dialog" aria-labelledby="startConfirmTitle">
+            <div class="app-dialog-icon" aria-hidden="true">!</div>
+            <p class="eyebrow">Confirmar acción</p>
+            <h2 id="startConfirmTitle">Iniciar una nueva prueba</h2>
+            <p class="app-dialog-message">Al iniciar una nueva prueba se borrarán las vueltas actuales. ¿Continuar?</p>
+            <form method="dialog" class="app-dialog-actions">
+              <button class="secondary-btn" type="submit" value="cancel">Cancelar</button>
+              <button class="control-btn start-btn" type="submit" value="confirm">Sí, iniciar</button>
+            </form>
+          </dialog>
+          <dialog id="resetConfirmDialog" class="app-dialog" aria-labelledby="resetConfirmTitle">
+            <div class="app-dialog-icon" aria-hidden="true">↺</div>
+            <p class="eyebrow">Confirmar reinicio</p>
+            <h2 id="resetConfirmTitle">Reiniciar tiempo</h2>
+            <p id="resetConfirmMessage" class="app-dialog-message">El reloj volverá a cero y se borrarán las vueltas actuales. Los jueces tendrán que marcarse preparados de nuevo.</p>
+            <form method="dialog" class="app-dialog-actions">
+              <button class="secondary-btn" type="submit" value="cancel">Cancelar</button>
+              <button class="control-btn stop-btn" type="submit" value="confirm">Reiniciar y borrar</button>
+            </form>
           </dialog>
           <p id="qrMessage" class="copy-message" aria-live="polite"></p>
         </div>
@@ -127,6 +167,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="./src/js/admin.js"></script>
+  <script type="module" src="./src/js/admin.js?v=3"></script>
 </body>
 </html>
