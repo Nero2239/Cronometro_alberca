@@ -22,7 +22,8 @@ const state = {
   stopInProgress: false,
   autoStopStartedAt: null,
   durationControlsDirty: false,
-  pendingDurationMs: null
+  pendingDurationMs: null,
+  pendingDurationMode: null
 };
 
 const formatTime = (ms) => {
@@ -53,6 +54,12 @@ const getDurationMs = () => {
   const durationMs = ((hours * 60 + minutes) * 60 + seconds) * 1000;
   return durationMs > 0 && durationMs <= 86400000 ? durationMs : null;
 };
+
+const getDurationMode = () => $('duration').value === 'custom' ? 'custom' : 'preset';
+const getStoredDurationMode = (durationMs) => [...$('duration').options]
+  .some((option) => Number(option.value) * 1000 === Number(durationMs))
+  ? 'preset'
+  : 'custom';
 
 const parseExpectedLanes = () => {
   const input = $('expectedLanes').value.trim();
@@ -283,6 +290,7 @@ $('startBtn').addEventListener('click', async () => {
       elapsedMs: 0,
       distancePerLap: getDistanceStep(),
       durationMs: getDurationMs(),
+      durationMode: getDurationMode(),
       expectedLanes,
       updatedAt: serverTimestamp()
     });
@@ -450,6 +458,7 @@ let configurationSaveQueue = Promise.resolve();
 const markDurationControlsDirty = () => {
   state.durationControlsDirty = true;
   state.pendingDurationMs = getDurationMs();
+  state.pendingDurationMode = getDurationMode();
 };
 
 const persistConfiguration = async () => {
@@ -467,6 +476,7 @@ const persistConfiguration = async () => {
     status: state.competition.status || 'ready',
     distancePerLap: getDistanceStep(),
     durationMs: getDurationMs(),
+    durationMode: getDurationMode(),
     expectedLanes: getExpectedLanes(),
     updatedAt: serverTimestamp()
   };
@@ -575,17 +585,27 @@ subscribeToCompetition((competition) => {
   }
   if (competition.durationMs) {
     const seconds = Number(competition.durationMs) / 1000;
+    const storedDurationMode = competition.durationMode === 'custom' || competition.durationMode === 'preset'
+      ? competition.durationMode
+      : getStoredDurationMode(competition.durationMs);
     const matchesPendingDuration = state.pendingDurationMs !== null
-      && Number(competition.durationMs) === state.pendingDurationMs;
-    if (matchesPendingDuration) state.durationControlsDirty = false;
+      && Number(competition.durationMs) === state.pendingDurationMs
+      && storedDurationMode === state.pendingDurationMode;
+    if (matchesPendingDuration) {
+      state.durationControlsDirty = false;
+      state.pendingDurationMs = null;
+      state.pendingDurationMode = null;
+    }
     if (competition.status === 'running') {
       state.durationControlsDirty = false;
       state.pendingDurationMs = null;
+      state.pendingDurationMode = null;
     }
     if (!state.durationControlsDirty) {
-      const preset = [...$('duration').options].some((option) => Number(option.value) === seconds);
+      const preset = storedDurationMode === 'preset'
+        && [...$('duration').options].some((option) => Number(option.value) === seconds);
       $('duration').value = preset ? String(seconds) : 'custom';
-      if (!preset && !['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
+      if (!['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
         $('durationHours').value = String(Math.floor(seconds / 3600));
         $('durationMinutes').value = String(Math.floor((seconds % 3600) / 60));
         $('durationSeconds').value = String(Math.floor(seconds % 60));

@@ -13,6 +13,7 @@ rules_version = '2';
 //   - elapsedMs: number (optional) — milliseconds elapsed when stopped
 //   - distancePerLap: number (optional) — meters per lap (1–10000)
 //   - durationMs: number (optional) — total event duration in ms
+//   - durationMode: string (optional) — "preset" | "custom"
 //   - expectedLanes: list (optional) — list of lane strings (e.g. ["1","2"])
 //   - updatedAt: timestamp (optional) — server timestamp of last update
 //
@@ -84,6 +85,13 @@ service cloud.firestore {
       return !(field in data) || data[field] == null || data[field] is timestamp;
     }
 
+    // Validate an optional duration mode
+    function validOptDurationMode(data) {
+      return !('durationMode' in data) ||
+             (data.durationMode is string &&
+              data.durationMode in ['preset', 'custom']);
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -91,8 +99,8 @@ service cloud.firestore {
     // Validate competition state document
     function isValidCompetitionState(data) {
       let allowedFields = ['status', 'startedAt', 'stoppedAt', 'elapsedMs',
-                           'distancePerLap', 'durationMs', 'expectedLanes',
-                           'updatedAt'];
+                           'distancePerLap', 'durationMs', 'durationMode',
+                           'expectedLanes', 'updatedAt'];
       let validStatus = data.status in ['ready', 'running', 'finished'];
       let validExpectedLanes = !(('expectedLanes' in data)) ||
                                (data.expectedLanes is list &&
@@ -106,6 +114,7 @@ service cloud.firestore {
              validOptNum(data, 'elapsedMs', 0, 86400000) &&
              validOptNum(data, 'distancePerLap', 1, 10000) &&
              validOptNum(data, 'durationMs', 1000, 86400000) &&
+             validOptDurationMode(data) &&
              validExpectedLanes;
     }
 
