@@ -49,7 +49,10 @@ export const setCompetitionState = async (state) => {
 };
 export const subscribeToCompetition = (callback, onError = () => {}) => {
   return onSnapshot(competitionRef, { includeMetadataChanges: true }, (snapshot) => {
-    callback(snapshot.exists() ? normalizeTimestamps(snapshot.data()) : { status: 'ready' });
+    callback(
+      snapshot.exists() ? normalizeTimestamps(snapshot.data()) : { status: 'ready' },
+      snapshot.metadata
+    );
   }, onError);
 };
 export const subscribeToServerOffset = (callback) => {

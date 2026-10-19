@@ -571,7 +571,7 @@ setTimeout(() => {
     renderReadiness();
   }
 }, 12000);
-subscribeToCompetition((competition) => {
+subscribeToCompetition((competition, snapshotMetadata) => {
   state.competition = competition;
   if (Array.isArray(competition.expectedLanes) && document.activeElement !== $('expectedLanes')) {
     $('expectedLanes').value = competition.expectedLanes.join(', ');
@@ -590,7 +590,9 @@ subscribeToCompetition((competition) => {
       : getStoredDurationMode(competition.durationMs);
     const matchesPendingDuration = state.pendingDurationMs !== null
       && Number(competition.durationMs) === state.pendingDurationMs
-      && storedDurationMode === state.pendingDurationMode;
+      && storedDurationMode === state.pendingDurationMode
+      && snapshotMetadata?.fromCache === false
+      && snapshotMetadata?.hasPendingWrites === false;
     if (matchesPendingDuration) {
       state.durationControlsDirty = false;
       state.pendingDurationMs = null;
