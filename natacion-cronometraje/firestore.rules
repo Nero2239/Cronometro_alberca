@@ -198,10 +198,6 @@ service cloud.firestore {
         ]);
     }
 
-    function userProfileExists(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId));
-    }
-
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) &&
@@ -217,38 +213,32 @@ service cloud.firestore {
 
       match /competition/{documentId} {
         allow read: if documentId == 'state' &&
-          isOwner(userId) &&
-          userProfileExists(userId);
+          isOwner(userId);
         allow create, update: if documentId == 'state' &&
           isOwner(userId) &&
-          userProfileExists(userId) &&
           isValidCompetitionState(request.resource.data);
         allow delete: if false;
       }
 
       match /sessions/{lane} {
-        allow read: if isOwner(userId) && userProfileExists(userId);
+        allow read: if isOwner(userId);
         allow create, update: if isOwner(userId) &&
-          userProfileExists(userId) &&
           isValidSession(request.resource.data) &&
           request.resource.data.lane == lane;
         allow delete: if false;
       }
 
       match /races/{raceId} {
-        allow read: if isOwner(userId) && userProfileExists(userId);
+        allow read: if isOwner(userId);
         allow create: if isOwner(userId) &&
-          userProfileExists(userId) &&
           isValidRace(request.resource.data) &&
           request.resource.data.createdAt == request.time;
         allow update, delete: if false;
 
         match /lanes/{lane} {
           allow read: if isOwner(userId) &&
-            userProfileExists(userId) &&
             exists(/databases/$(database)/documents/users/$(userId)/races/$(raceId));
           allow create: if isOwner(userId) &&
-            userProfileExists(userId) &&
             existsAfter(/databases/$(database)/documents/users/$(userId)/races/$(raceId)) &&
             isValidRaceLane(request.resource.data, lane);
           allow update, delete: if false;

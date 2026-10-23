@@ -1,4 +1,4 @@
-import { requireAuthentication } from './auth.js?v=2';
+import { requireAuthentication } from './auth.js?v=3';
 import { getRaceLanes, listRaces } from './firebase.js?v=3';
 
 await requireAuthentication();

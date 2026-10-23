@@ -510,19 +510,6 @@ button, input, select {
   align-items: center;
   gap: 10px;
 }
-.judge-signout {
-  min-height: 38px;
-  padding: 7px 10px;
-  border: 1px solid rgba(0,114,206,.2);
-  border-radius: 9px;
-  background: rgba(255,255,255,.78);
-  color: #0b416f;
-  font: inherit;
-  font-size: .78rem;
-  font-weight: 800;
-  cursor: pointer;
-}
 @media (max-width: 560px) {
-  .judge-header-actions { align-items: flex-end; flex-direction: column; }
-  .judge-signout { min-height: 34px; }
+  .judge-header-actions { align-items: flex-end; }
 }

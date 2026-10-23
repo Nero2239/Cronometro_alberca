@@ -78,15 +78,15 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 18px;
-  padding: clamp(12px, 1.7vw, 22px) clamp(16px, 2vw, 28px);
+  margin-bottom: 12px;
+  padding: 10px clamp(14px, 1.6vw, 22px);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 10px;
   background: #102b3a;
   color: white;
 }
 .official-clock .head-label { color: #b8cbd4; }
-.event-time { font-size: clamp(2.2rem, 4.5vw, 4.6rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.event-time { font-size: clamp(1.35rem, 2vw, 2rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .event-remaining { display: none; }
 .event-remaining.warning { color: #f1d279; }
 .official-clock .status-chip { flex: 0 0 auto; }
@@ -170,18 +170,6 @@ tbody tr:hover {
   font-size: 1rem;
   text-align: center;
 }
-.screen-signout {
-  min-height: 40px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: rgba(255,255,255,.8);
-  color: var(--brand);
-  font: inherit;
-  font-size: .82rem;
-  font-weight: 800;
-  cursor: pointer;
-}
 @media (max-width: 900px) {
   body { padding: 14px; }
   .official-clock { padding: 14px; }
@@ -195,7 +183,7 @@ tbody tr:hover {
   .screen-actions { flex-wrap: wrap; justify-content: flex-end; }
   .brand-title { font-size: clamp(1.45rem, 7vw, 2rem); }
   .official-clock { align-items: center; gap: 10px; padding: 12px; }
-  .event-time { font-size: clamp(1.8rem, 8vw, 2.5rem); }
+  .event-time { font-size: clamp(1.35rem, 5vw, 1.8rem); }
   .official-clock .status-chip { padding: 7px 9px; font-size: 0.67rem; }
   .table-head { padding: 16px; }
   th, td { padding: 11px 9px; }

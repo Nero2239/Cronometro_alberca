@@ -170,8 +170,8 @@ const authErrorMessage = (error) => ({
   'permission-denied': 'La cuenta se creó, pero no se pudo guardar el perfil del grupo. Inicia sesión e inténtalo de nuevo.'
 }[error.code] || error.message || 'No se pudo completar la solicitud.');
 
-if (document.querySelector('[data-sign-out]')) {
-  attachSignOutButtons();
+attachSignOutButtons();
+if (!document.getElementById('loginForm')) {
   onAuthStateChanged(auth, (user) => {
     if (!user) window.location.replace('./index.html');
   });

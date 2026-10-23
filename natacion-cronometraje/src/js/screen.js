@@ -1,4 +1,4 @@
-import { requireAuthentication } from './auth.js?v=2';
+import { requireAuthentication } from './auth.js?v=3';
 import {
   subscribeToConnection,
   subscribeToCompetition,
