@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
   "hosting": {
     "public": ".",
     "ignore": [
@@ -16,11 +21,15 @@
       },
       {
         "source": "/juez",
-        "destination": "/index.html"
+        "destination": "/judge.html"
       },
       {
         "source": "/proyeccion",
         "destination": "/screen.html"
+      },
+      {
+        "source": "/historial",
+        "destination": "/history.html"
       }
     ],
     "headers": [
@@ -53,6 +62,9 @@
     },
     "firestore": {
       "port": 8080
+    },
+    "auth": {
+      "port": 9099
     },
     "ui": {
       "enabled": false

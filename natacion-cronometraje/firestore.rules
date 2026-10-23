@@ -4,172 +4,258 @@ rules_version = '2';
 // Assumed Data Model
 // ===============================================================
 //
-// Collection: competition
-// Document ID: "state" (singleton)
-// Fields:
-//   - status: string (required) — "ready" | "running" | "finished"
-//   - startedAt: timestamp | null (optional) — server timestamp when started
-//   - stoppedAt: timestamp | null (optional) — server timestamp when stopped
-//   - elapsedMs: number (optional) — milliseconds elapsed when stopped
-//   - distancePerLap: number (optional) — meters per lap (1–10000)
-//   - durationMs: number (optional) — total event duration in ms
-//   - durationMode: string (optional) — "preset" | "custom"
-//   - expectedLanes: list (optional) — list of lane strings (e.g. ["1","2"])
-//   - updatedAt: timestamp (optional) — server timestamp of last update
+// users/{uid}: private group profile; only the matching authenticated UID
+// can read or modify it.
+//   uid: string, immutable and equal to the document ID.
+//   organizationName, poolName, contactName: strings, 1-120 chars.
+//   email: string, 3-254 chars and equal to the signed-in Auth email.
+//   phone: string, 5-40 chars. city: string, 1-80 chars.
+//   createdAt: timestamp, immutable.
 //
-// Collection: sessions
-// Document ID: lane number as string ("1"–"99")
-// Fields:
-//   - lane: string (required) — "1"–"99"
-//   - connected: bool (optional) — judge online status
-//   - ready: bool (optional) — judge ready to race
-//   - lastSeenAt: timestamp (optional) — heartbeat timestamp
-//   - updatedAt: timestamp (optional) — last write timestamp
-//   - team: string (optional, max 120 chars) — team name
-//   - judge: string (optional, max 120 chars) — judge name
-//   - totalDistance: number (optional) — cumulative meters swum
-//   - elapsedMs: number (optional) — time at last lap
-//   - laps: list (optional, max 10000 items) — lap records
-//   - checkpoints: list (optional, max 500 items) — 500 m milestone records
-//   - phase: string (optional) — "running" | "finished"
+// users/{uid}/competition/state: shared event configuration and clock.
+//   status: ready | running | finished. startedAt/stoppedAt: timestamp|null.
+//   elapsedMs: 0-86400000. distancePerLap: 1-10000.
+//   durationMs: 1000-86400000. durationMode: preset | custom.
+//   expectedLanes: up to 99 lane-number strings. updatedAt: timestamp.
 //
-// NOTE: No Firebase Authentication is used. Access is controlled by
-// schema validation and size limits rather than user identity.
+// users/{uid}/sessions/{lane}: current judge session. The document ID and
+// lane field must match (1-99). Names are limited to 120 chars; laps to
+// 10000 records and checkpoints to 500 records. Each record is a map with
+// distance, splitMs, elapsedMs, timestamp; checkpoints also include
+// registeredDistance. Connection/phase fields are typed and size-limited.
+//
+// users/{uid}/races/{raceId}: immutable history metadata with timestamp,
+// status, duration, distance-per-lap, elapsed time and expected lanes.
+// users/{uid}/races/{raceId}/lanes/{lane}: immutable lane snapshot using
+// the same bounded lane-session schema.
+//
+// Existing unscoped competition/state and sessions/{lane} documents are
+// intentionally not migrated or readable under these rules.
 //
 // ===============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
 
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
 
-    // Validate that a string is within allowed length bounds
-    function validStr(value, minLen, maxLen) {
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function validString(value, minLength, maxLength) {
       return value is string &&
-             value.size() >= minLen &&
-             value.size() <= maxLen;
+        value.size() >= minLength &&
+        value.size() <= maxLength;
     }
 
-    // Validate an optional string: absent OR within length bounds
-    function validOptStr(data, field, minLen, maxLen) {
+    function validLane(value) {
+      return value is string && value.matches('^[1-9][0-9]?$');
+    }
+
+    function validOptionalString(data, field, maxLength) {
       return !(field in data) ||
-             (data[field] is string &&
-              data[field].size() >= minLen &&
-              data[field].size() <= maxLen);
+        (data[field] is string && data[field].size() <= maxLength);
     }
 
-    // Validate an optional number with range
-    function validOptNum(data, field, minVal, maxVal) {
+    function validOptionalNumber(data, field, minValue, maxValue) {
       return !(field in data) ||
-             (data[field] is number &&
-              data[field] >= minVal &&
-              data[field] <= maxVal);
+        (data[field] is number &&
+         data[field] >= minValue &&
+         data[field] <= maxValue);
     }
 
-    // Validate an optional boolean
-    function validOptBool(data, field) {
+    function validOptionalBoolean(data, field) {
       return !(field in data) || data[field] is bool;
     }
 
-    // Validate an optional list with max size
-    function validOptList(data, field, maxSize) {
+    function validOptionalTimestamp(data, field) {
       return !(field in data) ||
-             (data[field] is list &&
-              data[field].size() <= maxSize);
+        data[field] == null ||
+        data[field] is timestamp;
     }
 
-    // Validate an optional timestamp
-    function validOptTimestamp(data, field) {
-      return !(field in data) || data[field] == null || data[field] is timestamp;
+    function validLapList(data) {
+      return !('laps' in data) ||
+        (data.laps is list && data.laps.size() <= 10000);
     }
 
-    // Validate an optional duration mode
-    function validOptDurationMode(data) {
-      return !('durationMode' in data) ||
-             (data.durationMode is string &&
-              data.durationMode in ['preset', 'custom']);
+    function validCheckpointList(data) {
+      return !('checkpoints' in data) ||
+        (data.checkpoints is list && data.checkpoints.size() <= 500);
     }
 
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
+    function validExpectedLanes(data) {
+      return !('expectedLanes' in data) ||
+        (data.expectedLanes is list &&
+         data.expectedLanes.size() <= 99 &&
+         data.expectedLanes.toSet().size() == data.expectedLanes.size());
+    }
 
-    // Validate competition state document
+    function isValidProfile(data) {
+      return data.keys().hasOnly([
+          'uid', 'organizationName', 'poolName', 'contactName',
+          'email', 'phone', 'city', 'createdAt'
+        ]) &&
+        data.keys().hasAll([
+          'uid', 'organizationName', 'poolName', 'contactName',
+          'email', 'phone', 'city', 'createdAt'
+        ]) &&
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        validString(data.organizationName, 1, 120) &&
+        validString(data.poolName, 1, 120) &&
+        validString(data.contactName, 1, 120) &&
+        validString(data.email, 3, 254) &&
+        data.email == request.auth.token.email &&
+        validString(data.phone, 5, 40) &&
+        validString(data.city, 1, 80) &&
+        data.createdAt is timestamp;
+    }
+
     function isValidCompetitionState(data) {
-      let allowedFields = ['status', 'startedAt', 'stoppedAt', 'elapsedMs',
-                           'distancePerLap', 'durationMs', 'durationMode',
-                           'expectedLanes', 'updatedAt'];
-      let validStatus = data.status in ['ready', 'running', 'finished'];
-      let validExpectedLanes = !(('expectedLanes' in data)) ||
-                               (data.expectedLanes is list &&
-                                data.expectedLanes.size() <= 99);
-      return data.keys().hasOnly(allowedFields) &&
-             validStr(data.status, 1, 20) &&
-             validStatus &&
-             validOptTimestamp(data, 'startedAt') &&
-             validOptTimestamp(data, 'stoppedAt') &&
-             validOptTimestamp(data, 'updatedAt') &&
-             validOptNum(data, 'elapsedMs', 0, 86400000) &&
-             validOptNum(data, 'distancePerLap', 1, 10000) &&
-             validOptNum(data, 'durationMs', 1000, 86400000) &&
-             validOptDurationMode(data) &&
-             validExpectedLanes;
+      return data.keys().hasOnly([
+          'status', 'startedAt', 'stoppedAt', 'elapsedMs',
+          'distancePerLap', 'durationMs', 'durationMode',
+          'expectedLanes', 'updatedAt'
+        ]) &&
+        data.keys().hasAll(['status']) &&
+        data.status in ['ready', 'running', 'finished'] &&
+        validOptionalTimestamp(data, 'startedAt') &&
+        validOptionalTimestamp(data, 'stoppedAt') &&
+        validOptionalTimestamp(data, 'updatedAt') &&
+        validOptionalNumber(data, 'elapsedMs', 0, 86400000) &&
+        validOptionalNumber(data, 'distancePerLap', 1, 10000) &&
+        validOptionalNumber(data, 'durationMs', 1000, 86400000) &&
+        (!('durationMode' in data) || data.durationMode in ['preset', 'custom']) &&
+        validExpectedLanes(data);
     }
 
-    // Validate a judge session document
     function isValidSession(data) {
-      let allowedFields = ['lane', 'connected', 'ready', 'lastSeenAt',
-                           'updatedAt', 'team', 'judge', 'totalDistance',
-                           'elapsedMs', 'laps', 'checkpoints', 'phase'];
-      let validPhase = !(('phase' in data)) ||
-                       data.phase in ['running', 'finished'];
-      return data.keys().hasOnly(allowedFields) &&
-             validStr(data.lane, 1, 2) &&
-             validOptBool(data, 'connected') &&
-             validOptBool(data, 'ready') &&
-             validOptTimestamp(data, 'lastSeenAt') &&
-             validOptTimestamp(data, 'updatedAt') &&
-             validOptStr(data, 'team', 0, 120) &&
-             validOptStr(data, 'judge', 0, 120) &&
-             validOptNum(data, 'totalDistance', 0, 1000000) &&
-             validOptNum(data, 'elapsedMs', 0, 86400000) &&
-             validOptList(data, 'laps', 10000) &&
-             validOptList(data, 'checkpoints', 500) &&
-             validPhase;
+      return data.keys().hasOnly([
+          'lane', 'connected', 'ready', 'lastSeenAt', 'updatedAt',
+          'team', 'judge', 'totalDistance', 'elapsedMs',
+          'laps', 'checkpoints', 'phase'
+        ]) &&
+        data.keys().hasAll(['lane']) &&
+        validLane(data.lane) &&
+        validOptionalBoolean(data, 'connected') &&
+        validOptionalBoolean(data, 'ready') &&
+        validOptionalTimestamp(data, 'lastSeenAt') &&
+        validOptionalTimestamp(data, 'updatedAt') &&
+        validOptionalString(data, 'team', 120) &&
+        validOptionalString(data, 'judge', 120) &&
+        validOptionalNumber(data, 'totalDistance', 0, 1000000) &&
+        validOptionalNumber(data, 'elapsedMs', 0, 86400000) &&
+        validLapList(data) &&
+        validCheckpointList(data) &&
+        (!('phase' in data) || data.phase in ['running', 'finished']);
     }
 
-    // ===============================================================
-    // competition/{docId} rules
-    // ===============================================================
-    // Public read: jueces y pantalla de proyección necesitan leer
-    // el estado sin autenticación.
-    // Write: validado por esquema estricto (sin auth por diseño).
-    match /competition/{docId} {
-      allow read: if true;
-      allow create: if isValidCompetitionState(request.resource.data);
-      allow update: if isValidCompetitionState(request.resource.data);
+    function isValidRace(data) {
+      return data.keys().hasOnly([
+          'status', 'createdAt', 'durationMs', 'durationMode',
+          'distancePerLap', 'elapsedMs', 'expectedLanes'
+        ]) &&
+        data.keys().hasAll([
+          'status', 'createdAt', 'durationMs', 'durationMode',
+          'distancePerLap', 'elapsedMs', 'expectedLanes'
+        ]) &&
+        data.status in ['ready', 'running', 'finished'] &&
+        data.createdAt is timestamp &&
+        data.durationMs is number &&
+        data.durationMs >= 1000 &&
+        data.durationMs <= 86400000 &&
+        data.durationMode in ['preset', 'custom'] &&
+        data.distancePerLap is number &&
+        data.distancePerLap >= 1 &&
+        data.distancePerLap <= 10000 &&
+        data.elapsedMs is number &&
+        data.elapsedMs >= 0 &&
+        data.elapsedMs <= 86400000 &&
+        validExpectedLanes(data);
+    }
+
+    function isValidRaceLane(data, lane) {
+      return isValidSession(data) &&
+        data.lane == lane &&
+        data.keys().hasAll([
+          'lane', 'team', 'judge', 'totalDistance', 'elapsedMs',
+          'laps', 'checkpoints', 'phase'
+        ]);
+    }
+
+    function userProfileExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        uidUnchanged() &&
+        isValidProfile(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) &&
+        isDocOwner() &&
+        uidNotModified() &&
+        isValidProfile(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
+
+      match /competition/{documentId} {
+        allow read: if documentId == 'state' &&
+          isOwner(userId) &&
+          userProfileExists(userId);
+        allow create, update: if documentId == 'state' &&
+          isOwner(userId) &&
+          userProfileExists(userId) &&
+          isValidCompetitionState(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /sessions/{lane} {
+        allow read: if isOwner(userId) && userProfileExists(userId);
+        allow create, update: if isOwner(userId) &&
+          userProfileExists(userId) &&
+          isValidSession(request.resource.data) &&
+          request.resource.data.lane == lane;
+        allow delete: if false;
+      }
+
+      match /races/{raceId} {
+        allow read: if isOwner(userId) && userProfileExists(userId);
+        allow create: if isOwner(userId) &&
+          userProfileExists(userId) &&
+          isValidRace(request.resource.data) &&
+          request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+
+        match /lanes/{lane} {
+          allow read: if isOwner(userId) &&
+            userProfileExists(userId) &&
+            exists(/databases/$(database)/documents/users/$(userId)/races/$(raceId));
+          allow create: if isOwner(userId) &&
+            userProfileExists(userId) &&
+            existsAfter(/databases/$(database)/documents/users/$(userId)/races/$(raceId)) &&
+            isValidRaceLane(request.resource.data, lane);
+          allow update, delete: if false;
+        }
+      }
     }
 
-    // ===============================================================
-    // sessions/{lane} rules
-    // ===============================================================
-    // Public read: el admin y la pantalla necesitan leer todas las
-    // sesiones. Los jueces leen su propia sesión.
-    // Write: validado por esquema; el lane del documento debe coincidir
-    // con el ID del documento para prevenir manipulación de otros carriles.
-    match /sessions/{lane} {
-      allow read: if true;
-      allow create: if isValidSession(request.resource.data) &&
-                       request.resource.data.lane == lane;
-      allow update: if isValidSession(request.resource.data) &&
-                       request.resource.data.lane == lane;
-      allow delete: if false;
-    }
-
-    // Deny all other collections
     match /{document=**} {
       allow read, write: if false;
     }

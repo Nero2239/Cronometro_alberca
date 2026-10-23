@@ -1,5 +1,6 @@
+import { requireAuthentication } from './auth.js?v=2';
 import {
-  firebaseConfig,
+  saveRace,
   serverTimestamp,
   setCompetitionState,
   subscribeToConnection,
@@ -7,7 +8,9 @@ import {
   subscribeToServerOffset,
   subscribeToSessions,
   updateSession
-} from './firebase.js?v=2';
+} from './firebase.js?v=3';
+
+await requireAuthentication();
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -19,11 +22,11 @@ const state = {
   connectionTimedOut: false,
   connectionError: '',
   rafId: null,
+  startInProgress: false,
   stopInProgress: false,
   autoStopStartedAt: null,
-  durationControlsDirty: false,
-  pendingDurationMs: null,
-  pendingDurationMode: null
+  configurationControlsDirty: false,
+  pendingConfiguration: null
 };
 
 const formatTime = (ms) => {
@@ -190,11 +193,9 @@ const renderTimer = () => {
   renderReadiness();
   $('stopBtn').disabled = !running;
   $('resetBtn').disabled = !state.connected || state.connectionPending || state.stopInProgress;
-  $('distanceStep').disabled = running;
-  $('customStep').disabled = running || $('distanceStep').value !== 'custom';
-  $('duration').disabled = running;
+  $('customStep').disabled = $('distanceStep').value !== 'custom';
   for (const id of ['durationHours', 'durationMinutes', 'durationSeconds']) {
-    $(id).disabled = running || $('duration').value !== 'custom';
+    $(id).disabled = $('duration').value !== 'custom';
   }
   $('durationHint').hidden = $('duration').value !== 'custom' || selectedDuration !== null;
   $('durationHint').classList.toggle('invalid', !$('durationHint').hidden);
@@ -221,7 +222,7 @@ const renderReadiness = () => {
   $('readinessSummary').textContent = error
     ? error
     : `Jueces conectados: ${connectedCount}/${expectedLanes.length} · preparados: ${readyCount}/${expectedLanes.length}`;
-  $('startBtn').disabled = state.competition.status === 'running' || !allReady;
+  $('startBtn').disabled = state.competition.status === 'running' || state.startInProgress || !allReady;
 
   const connection = $('connectionStatus');
   connection.textContent = state.connected
@@ -262,7 +263,7 @@ const renderTable = () => {
 };
 
 $('startBtn').addEventListener('click', async () => {
-  if (state.competition.status === 'running') return;
+  if (state.competition.status === 'running' || state.startInProgress) return;
   const expectedLanes = getExpectedLanes();
   if (!state.connected || !expectedLanes.length || getReadyCount() !== expectedLanes.length) return;
   const hasPreviousLaps = expectedLanes.some((lane) => (getSession(lane)?.laps?.length || 0) > 0);
@@ -272,9 +273,10 @@ $('startBtn').addEventListener('click', async () => {
     $('actionFeedback').textContent = 'La duración debe estar entre 00:00:01 y 24:00:00.';
     return;
   }
-  if (hasPreviousLaps && !await showConfirmation('startConfirmDialog')) return;
-
+  state.startInProgress = true;
+  renderReadiness();
   try {
+    if (hasPreviousLaps && !await showConfirmation('startConfirmDialog')) return;
     await Promise.all(expectedLanes.map((lane) => updateSession(lane, {
       totalDistance: 0,
       elapsedMs: 0,
@@ -298,6 +300,9 @@ $('startBtn').addEventListener('click', async () => {
   } catch (error) {
     console.error('No se pudo iniciar la prueba:', error);
     $('actionFeedback').textContent = `No se pudo iniciar: ${error.message || 'verifica Firebase y sus reglas.'}`;
+  } finally {
+    state.startInProgress = false;
+    renderReadiness();
   }
 });
 
@@ -344,6 +349,38 @@ $('resetBtn').addEventListener('click', async () => {
   renderTimer();
   const expectedLanes = getExpectedLanes();
   try {
+    let saveMessage = '';
+    if ($('saveRaceBeforeReset').checked) {
+      const eventSessions = expectedLanes.map((lane) => getSession(lane) || {
+        lane,
+        team: '',
+        judge: '',
+        totalDistance: 0,
+        elapsedMs: 0,
+        laps: [],
+        checkpoints: [],
+        phase: 'finished'
+      });
+      const hasRaceData = eventSessions.some((session) => (
+        (Array.isArray(session.laps) && session.laps.length > 0)
+        || (Number(session.totalDistance) || 0) > 0
+        || Boolean(session.team)
+        || Boolean(session.judge)
+      ));
+      if (hasRaceData) {
+        await saveRace({
+          status: state.competition.status,
+          durationMs: Number(state.competition.durationMs) || getDurationMs(),
+          durationMode: state.competition.durationMode || getDurationMode(),
+          distancePerLap: Number(state.competition.distancePerLap) || getDistanceStep(),
+          elapsedMs: getElapsed(),
+          expectedLanes
+        }, eventSessions);
+        saveMessage = ' Carrera guardada en el historial.';
+      } else {
+        saveMessage = ' No había registros para guardar.';
+      }
+    }
     await Promise.all(expectedLanes.map((lane) => updateSession(lane, {
       totalDistance: 0,
       elapsedMs: 0,
@@ -354,13 +391,14 @@ $('resetBtn').addEventListener('click', async () => {
     })));
     await setCompetitionState({
       status: 'ready',
+      startedAt: null,
       stoppedAt: serverTimestamp(),
       elapsedMs: 0,
       expectedLanes,
       updatedAt: serverTimestamp()
     });
     state.autoStopStartedAt = null;
-    $('actionFeedback').textContent = 'Prueba reiniciada; vueltas borradas y jueces pendientes de preparación.';
+    $('actionFeedback').textContent = `Prueba reiniciada; vueltas borradas y jueces pendientes de preparación.${saveMessage}`;
   } catch (error) {
     console.error('No se pudo reiniciar la prueba:', error);
     $('actionFeedback').textContent = `No se pudo reiniciar: ${error.message || 'verifica Firebase y sus reglas.'}`;
@@ -425,7 +463,7 @@ $('generateQrBtn').addEventListener('click', async () => {
     return;
   }
 
-  const judgeUrl = new URL(`https://${firebaseConfig.projectId}.web.app/index.html`);
+  const judgeUrl = new URL('./judge.html', window.location.href);
   judgeUrl.searchParams.set('lane', assignedLane);
   try {
     const module = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
@@ -455,14 +493,12 @@ $('copyQrLinkBtn').addEventListener('click', async () => {
 
 let durationSaveTimeout = null;
 let configurationSaveQueue = Promise.resolve();
-const markDurationControlsDirty = () => {
-  state.durationControlsDirty = true;
-  state.pendingDurationMs = getDurationMs();
-  state.pendingDurationMode = getDurationMode();
+const markConfigurationControlsDirty = () => {
+  state.configurationControlsDirty = true;
 };
 
 const persistConfiguration = async () => {
-  if (!state.connected || state.competition.status === 'running') return;
+  if (!state.connected) return;
   if (getDurationMs() === null) {
     $('durationHint').hidden = false;
     $('durationHint').classList.add('invalid');
@@ -479,6 +515,12 @@ const persistConfiguration = async () => {
     durationMode: getDurationMode(),
     expectedLanes: getExpectedLanes(),
     updatedAt: serverTimestamp()
+  };
+  state.pendingConfiguration = {
+    distancePerLap: configuration.distancePerLap,
+    durationMs: configuration.durationMs,
+    durationMode: configuration.durationMode,
+    expectedLanes: configuration.expectedLanes
   };
   const save = configurationSaveQueue.then(
     () => setCompetitionState(configuration),
@@ -502,29 +544,32 @@ const scheduleDurationConfigurationSave = () => {
 
 $('distanceStep').addEventListener('change', () => {
   $('customStepWrap').hidden = $('distanceStep').value !== 'custom';
+  markConfigurationControlsDirty();
   renderTimer();
   persistConfiguration();
 });
 $('duration').addEventListener('change', () => {
   $('customDurationWrap').hidden = $('duration').value !== 'custom';
   $('durationHint').hidden = $('duration').value !== 'custom';
-  markDurationControlsDirty();
+  markConfigurationControlsDirty();
   renderTimer();
   persistConfiguration();
 });
 $('expectedLanes').addEventListener('input', () => {
+  markConfigurationControlsDirty();
   renderTable();
 });
 $('expectedLanes').addEventListener('change', () => {
   persistConfiguration();
 });
 $('customStep').addEventListener('change', () => {
+  markConfigurationControlsDirty();
   renderTimer();
   persistConfiguration();
 });
 for (const id of ['durationHours', 'durationMinutes', 'durationSeconds']) {
   $(id).addEventListener('input', () => {
-    markDurationControlsDirty();
+    markConfigurationControlsDirty();
     renderTimer();
     scheduleDurationConfigurationSave();
   });
@@ -573,47 +618,48 @@ setTimeout(() => {
 }, 12000);
 subscribeToCompetition((competition, snapshotMetadata) => {
   state.competition = competition;
-  if (Array.isArray(competition.expectedLanes) && document.activeElement !== $('expectedLanes')) {
-    $('expectedLanes').value = competition.expectedLanes.join(', ');
-  }
-  if (competition.distancePerLap) {
-    const distance = Number(competition.distancePerLap);
-    const preset = [...$('distanceStep').options].some((option) => Number(option.value) === distance);
-    $('distanceStep').value = preset ? String(distance) : 'custom';
-    if (!preset) $('customStep').value = String(distance);
-    $('customStepWrap').hidden = preset;
-  }
   if (competition.durationMs) {
     const seconds = Number(competition.durationMs) / 1000;
     const storedDurationMode = competition.durationMode === 'custom' || competition.durationMode === 'preset'
       ? competition.durationMode
       : getStoredDurationMode(competition.durationMs);
-    const matchesPendingDuration = state.pendingDurationMs !== null
-      && Number(competition.durationMs) === state.pendingDurationMs
-      && storedDurationMode === state.pendingDurationMode
+    const pendingConfiguration = state.pendingConfiguration;
+    const matchesPendingConfiguration = pendingConfiguration
+      && Number(competition.durationMs) === pendingConfiguration.durationMs
+      && storedDurationMode === pendingConfiguration.durationMode
+      && Number(competition.distancePerLap) === pendingConfiguration.distancePerLap
+      && JSON.stringify(competition.expectedLanes || []) === JSON.stringify(pendingConfiguration.expectedLanes)
       && snapshotMetadata?.fromCache === false
       && snapshotMetadata?.hasPendingWrites === false;
-    if (matchesPendingDuration) {
-      state.durationControlsDirty = false;
-      state.pendingDurationMs = null;
-      state.pendingDurationMode = null;
+    if (matchesPendingConfiguration) {
+      state.configurationControlsDirty = false;
+      state.pendingConfiguration = null;
     }
-    if (competition.status === 'running') {
-      state.durationControlsDirty = false;
-      state.pendingDurationMs = null;
-      state.pendingDurationMode = null;
-    }
-    if (!state.durationControlsDirty) {
-      const preset = storedDurationMode === 'preset'
+    if (!state.configurationControlsDirty) {
+      if (Array.isArray(competition.expectedLanes) && document.activeElement !== $('expectedLanes')) {
+        $('expectedLanes').value = competition.expectedLanes.join(', ');
+      }
+      if (competition.distancePerLap) {
+        const distance = Number(competition.distancePerLap);
+        const distancePreset = [...$('distanceStep').options].some((option) => Number(option.value) === distance);
+        $('distanceStep').value = distancePreset ? String(distance) : 'custom';
+        if (!distancePreset) $('customStep').value = String(distance);
+        $('customStepWrap').hidden = distancePreset;
+      }
+      const durationPreset = storedDurationMode === 'preset'
         && [...$('duration').options].some((option) => Number(option.value) === seconds);
-      $('duration').value = preset ? String(seconds) : 'custom';
+      $('duration').value = durationPreset ? String(seconds) : 'custom';
       if (!['durationHours', 'durationMinutes', 'durationSeconds'].includes(document.activeElement?.id)) {
         $('durationHours').value = String(Math.floor(seconds / 3600));
         $('durationMinutes').value = String(Math.floor((seconds % 3600) / 60));
         $('durationSeconds').value = String(Math.floor(seconds % 60));
       }
-      $('customDurationWrap').hidden = preset;
-      $('durationHint').hidden = preset || getDurationMs() !== null;
+      $('customDurationWrap').hidden = durationPreset;
+      $('durationHint').hidden = durationPreset || getDurationMs() !== null;
+    }
+  } else if (!state.configurationControlsDirty) {
+    if (Array.isArray(competition.expectedLanes) && document.activeElement !== $('expectedLanes')) {
+      $('expectedLanes').value = competition.expectedLanes.join(', ');
     }
   }
   renderTimer();

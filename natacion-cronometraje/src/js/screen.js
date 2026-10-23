@@ -1,9 +1,12 @@
+import { requireAuthentication } from './auth.js?v=2';
 import {
   subscribeToConnection,
   subscribeToCompetition,
   subscribeToServerOffset,
   subscribeToSessions
-} from './firebase.js?v=2';
+} from './firebase.js?v=3';
+
+await requireAuthentication();
 
 const $ = (id) => document.getElementById(id);
 const state = {

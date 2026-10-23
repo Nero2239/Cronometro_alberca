@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tabla de resultados - Natación</title>
-  <link rel="stylesheet" href="./src/css/screen.css?v=2" />
+  <link rel="stylesheet" href="./src/css/screen.css?v=3" />
   <link rel="stylesheet" href="./src/css/aero.css?v=2" />
 </head>
 <body>
@@ -19,6 +19,10 @@
         </div>
         <h1 class="brand-title">Control de natación</h1>
       </div>
+      <nav class="screen-actions" aria-label="Sesión">
+        <a class="admin-link" href="./admin.html">Administración</a>
+        <button class="screen-signout" type="button" data-sign-out>Cerrar sesión</button>
+      </nav>
     </header>
     <div id="screenConnection" class="connection-banner offline" role="status">Conectando con Firebase...</div>
 
@@ -59,6 +63,6 @@
     </section>
   </div>
 
-  <script type="module" src="./src/js/screen.js?v=3"></script>
+  <script type="module" src="./src/js/screen.js?v=4"></script>
 </body>
 </html>

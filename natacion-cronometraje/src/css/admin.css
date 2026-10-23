@@ -163,6 +163,8 @@ h2 { font-size: 1.2rem; }
 .assignment-row { gap: 10px; }
 .assignment-row select { min-width: 110px; max-width: 180px; }
 .secondary-btn { background: #e2edf1; color: #123d50; }
+.save-race-choice { display: flex; align-items: flex-start; gap: 9px; margin: 14px 0 18px; color: #36586a; font-size: .85rem; font-weight: 700; line-height: 1.4; }
+.save-race-choice input { flex: 0 0 auto; width: 17px; height: 17px; margin: 1px 0 0; accent-color: #087ec0; }
 .copy-message { min-height: 18px; margin-top: 5px; color: #147251; font-size: 0.8rem; }
 .qr-dialog {
   width: min(420px, calc(100% - 32px));

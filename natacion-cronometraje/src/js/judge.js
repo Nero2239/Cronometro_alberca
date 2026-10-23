@@ -1,3 +1,4 @@
+import { requireAuthentication } from './auth.js?v=2';
 import {
   heartbeatSession,
   serverTimestamp,
@@ -7,7 +8,9 @@ import {
   subscribeToServerOffset,
   subscribeToSession,
   updateSession
-} from './firebase.js?v=2';
+} from './firebase.js?v=3';
+
+await requireAuthentication();
 
 const PAGE_SIZE = 6;
 const params = new URLSearchParams(window.location.search);

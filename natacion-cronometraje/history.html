@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1724">
+  <title>Historial de carreras - Cronometraje de Natación</title>
+  <link rel="stylesheet" href="./src/css/history.css?v=1">
+  <link rel="stylesheet" href="./src/css/aero.css?v=2">
+</head>
+<body>
+  <main class="history-app">
+    <header class="history-topbar">
+      <div>
+        <p class="eyebrow">Cronometraje de natación</p>
+        <h1>Historial de carreras</h1>
+      </div>
+      <nav class="history-actions" aria-label="Navegación">
+        <a class="history-link" href="./admin.html">Volver al panel</a>
+        <button class="secondary-btn" type="button" data-sign-out>Cerrar sesión</button>
+      </nav>
+    </header>
+
+    <section class="history-panel">
+      <div class="history-toolbar">
+        <div>
+          <h2>Carreras guardadas</h2>
+          <p>Consulta los registros por carril y la fecha de cada carrera.</p>
+        </div>
+        <label class="sort-control" for="sortDirection">
+          Orden
+          <select id="sortDirection">
+            <option value="asc" selected>Más antiguas primero</option>
+            <option value="desc">Más recientes primero</option>
+          </select>
+        </label>
+      </div>
+      <p id="historyFeedback" class="history-feedback" role="status" aria-live="polite">Cargando historial...</p>
+      <div id="historyList" class="history-list"></div>
+    </section>
+  </main>
+  <script type="module" src="./src/js/history.js?v=1"></script>
+</body>
+</html>
